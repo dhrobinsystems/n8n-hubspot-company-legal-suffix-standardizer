@@ -58,6 +58,8 @@ I built this workflow to remove that noise without damaging the names it touches
 
 ## 2. Architecture and Data Flow
 
+![HubSpot Company Legal Suffix Standardizer Workflow Overview](workflow-overview.png)
+
 ```mermaid
 flowchart LR
     SCH[Nightly Hygiene Schedule<br/>02:40 UTC] --> CFG
