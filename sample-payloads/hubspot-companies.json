@@ -1,0 +1,318 @@
+{
+  "_comment": "Synthetic fixture in the HubSpot CRM search response shape. All company names and IDs are fictitious. Expected results: README §5.",
+  "total": 24,
+  "results": [
+    {
+      "id": "1004501",
+      "properties": {
+        "hs_object_id": "1004501",
+        "name": "Acme Cloud Solutions, LLC",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T01:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T01:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004502",
+      "properties": {
+        "hs_object_id": "1004502",
+        "name": "Northstar Logistics Inc.",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T02:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T02:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004503",
+      "properties": {
+        "hs_object_id": "1004503",
+        "name": "Bavaria Precision Engineering GmbH",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T03:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T03:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004504",
+      "properties": {
+        "hs_object_id": "1004504",
+        "name": "Apex Global Holdings Ltd.",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T04:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T04:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004505",
+      "properties": {
+        "hs_object_id": "1004505",
+        "name": "Incredible Foods",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T05:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T05:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004506",
+      "properties": {
+        "hs_object_id": "1004506",
+        "name": "Global Tech Holdings, LLC",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T06:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T06:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004507",
+      "properties": {
+        "hs_object_id": "1004507",
+        "name": "Coastline Co.",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T07:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T07:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004508",
+      "properties": {
+        "hs_object_id": "1004508",
+        "name": "Harbor & Co.",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T08:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T08:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004509",
+      "properties": {
+        "hs_object_id": "1004509",
+        "name": "Lumière Optique S.A.S.",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T09:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T09:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004510",
+      "properties": {
+        "hs_object_id": "1004510",
+        "name": "Kiwi Orchard Pty Ltd",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T01:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T01:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004511",
+      "properties": {
+        "hs_object_id": "1004511",
+        "name": "Rotterdam Freight B.V.",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T02:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T02:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004512",
+      "properties": {
+        "hs_object_id": "1004512",
+        "name": "Andes Mining S.A. de C.V.",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T03:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T03:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004513",
+      "properties": {
+        "hs_object_id": "1004513",
+        "name": "Bella Spa",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T04:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T04:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004514",
+      "properties": {
+        "hs_object_id": "1004514",
+        "name": "Milano Tessile S.p.A.",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T05:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T05:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004515",
+      "properties": {
+        "hs_object_id": "1004515",
+        "name": "Clearbrook Analytics",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T06:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T06:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004516",
+      "properties": {
+        "hs_object_id": "1004516",
+        "name": "The Group",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T07:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T07:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004517",
+      "properties": {
+        "hs_object_id": "1004517",
+        "name": "Summit Legal Partners LLP",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T08:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T08:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004518",
+      "properties": {
+        "hs_object_id": "1004518",
+        "name": "  pinecrest   dental, p.c.  ",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T09:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T09:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004519",
+      "properties": {
+        "hs_object_id": "1004519",
+        "name": "Corporate Travel Experts",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T01:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T01:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004520",
+      "properties": {
+        "hs_object_id": "1004520",
+        "name": "Orion Data Corp, Inc.",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T02:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T02:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004521",
+      "properties": {
+        "hs_object_id": "1004521",
+        "name": "Tokyo Robotics Co., Ltd.",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T03:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T03:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004522",
+      "properties": {
+        "hs_object_id": "1004522",
+        "name": "Wisła Software Sp. z o.o.",
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T04:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T04:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004523",
+      "properties": {
+        "hs_object_id": "1004523",
+        "name": "Delta Freight LLC",
+        "clean_company_name": "Delta Freight",
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T05:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T05:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "1004524",
+      "properties": {
+        "hs_object_id": "1004524",
+        "name": null,
+        "clean_company_name": null,
+        "legal_name_original": null,
+        "hs_lastmodifieddate": "2026-11-16T06:00:00.000Z"
+      },
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "updatedAt": "2026-11-16T06:00:00.000Z",
+      "archived": false
+    }
+  ]
+}
