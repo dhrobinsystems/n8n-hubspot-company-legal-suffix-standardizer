@@ -1,0 +1,1431 @@
+{
+  "name": "HubSpot Company Legal Suffix Standardizer (dhRobin Systems)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## n8n-hubspot-company-legal-suffix-standardizer\n**dhRobin Systems** · Daily: HubSpot companies (search, paginated) → strip trailing legal suffixes (US, UK, EU, APAC, LATAM; stacked; brand-safe) → `cleaned_name`, `extracted_suffixes`, `was_modified`, `match_key` → batch update (≤ 100/request) → Slack / webhook → audit.\n\n**Safe by default.** With no environment variables set:\n- `SANDBOX_MODE=true`: synthetic companies. **Zero HubSpot calls.**\n- `DRY_RUN=true`, `WRITE_TO_HUBSPOT=false`: nothing is written.\n- `OVERWRITE_NAME=false`: the cleaned name goes to `clean_company_name`; `name` is never touched.",
+        "height": 400,
+        "width": 680,
+        "color": 5
+      },
+      "id": "efaf089f-83ca-5782-b1d0-3e0d60534563",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -620,
+        -520
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Cleaning rules\n- End-of-name, whole-token matches only: \"Incredible Foods\" and \"Corporate Travel\" are safe.\n- Ambiguous forms (Spa, SA, AG, PC, LP…) only when dotted, capitalised or canonical.\n- Never leaves an empty or meaningless name (\"The Group\" stays).\n- `PROTECTED_NAMES` (pipe-separated) are never changed.",
+        "height": 230,
+        "width": 420,
+        "color": 6
+      },
+      "id": "5485df1f-797f-5df9-85b3-caadd3d72519",
+      "name": "Rules Notice",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        -380
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Pinned synthetic payloads\nPinned: HubSpot search (1 page), batch update (1 batch), Slack, webhook.\nPins apply to **manual executions only**. Unpin before a manual live test.",
+        "height": 170,
+        "width": 360,
+        "color": 3
+      },
+      "id": "bc77023d-cd8d-5353-b4ad-5503528f5a64",
+      "name": "Pinned Data Notice",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "40 2 * * *"
+            }
+          ]
+        }
+      },
+      "id": "4d04d367-fe5a-5a94-bf54-bfce68960b6e",
+      "name": "Nightly Hygiene Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -560,
+        100
+      ],
+      "notes": "Daily 02:40 UTC (matches LOOKBACK_HOURS=25).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "9c53490f-bea7-57a6-b368-124478a03d77",
+      "name": "Manual Test Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5ec70ab2-0694-526f-b814-e83cdcca3a2a",
+              "name": "config.sandboxMode",
+              "value": "={{ String($env.SANDBOX_MODE ?? 'true').trim().toLowerCase() !== 'false' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "95e46bdf-6d2e-5c55-85c9-38db6fdfd4b2",
+              "name": "config.dryRun",
+              "value": "={{ String($env.DRY_RUN ?? 'true').trim().toLowerCase() !== 'false' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "7ec8725a-b492-5632-9555-641fa0adcbd1",
+              "name": "config.writeToHubspot",
+              "value": "={{ !(String($env.SANDBOX_MODE ?? 'true').trim().toLowerCase() !== 'false') && !(String($env.DRY_RUN ?? 'true').trim().toLowerCase() !== 'false') && String($env.WRITE_TO_HUBSPOT ?? 'false').trim().toLowerCase() === 'true' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "a4aedf2e-579e-516d-ac57-802a5eb619ee",
+              "name": "config.searchScope",
+              "value": "={{ ['modified_since', 'backfill', 'unprocessed'].includes(String($env.SEARCH_SCOPE ?? 'modified_since').trim().toLowerCase()) ? String($env.SEARCH_SCOPE ?? 'modified_since').trim().toLowerCase() : 'modified_since' }}",
+              "type": "string"
+            },
+            {
+              "id": "425214ce-fbf0-5122-864a-572188e015cd",
+              "name": "config.lookbackHours",
+              "value": "={{ Math.min(8760, Math.max(1, Number.isFinite(parseFloat($env.LOOKBACK_HOURS)) ? Math.round(parseFloat($env.LOOKBACK_HOURS)) : 25)) }}",
+              "type": "number"
+            },
+            {
+              "id": "6b8940f3-da6b-5aaa-a804-44a142a5c453",
+              "name": "config.backfillStartAfterId",
+              "value": "={{ /^\\d+$/.test(String($env.BACKFILL_START_AFTER_ID ?? '').trim()) ? String($env.BACKFILL_START_AFTER_ID).trim() : '' }}",
+              "type": "string"
+            },
+            {
+              "id": "b1cfa06e-b39f-5b37-9095-a59aea157b58",
+              "name": "config.batchLimit",
+              "value": "={{ Math.min(10000, Math.max(1, Number.isFinite(parseFloat($env.BATCH_LIMIT)) ? Math.round(parseFloat($env.BATCH_LIMIT)) : 500)) }}",
+              "type": "number"
+            },
+            {
+              "id": "844fd3d2-00bb-5d6d-83d0-a34cfe3c1fc8",
+              "name": "config.cleanNameProperty",
+              "value": "={{ (p => /^[a-z][a-z0-9_]{0,99}$/.test(p) ? p : '')(String($env.CLEAN_NAME_PROPERTY ?? 'clean_company_name').trim().toLowerCase()) }}",
+              "type": "string"
+            },
+            {
+              "id": "206c56b2-4396-5419-ab0a-827deee2725d",
+              "name": "config.overwriteName",
+              "value": "={{ String($env.OVERWRITE_NAME ?? 'false').trim().toLowerCase() === 'true' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "cb22ad28-87ee-5605-ade8-fddcd4d65f5b",
+              "name": "config.rawNameProperty",
+              "value": "={{ (p => /^[a-z][a-z0-9_]{0,99}$/.test(p) ? p : '')(String($env.RAW_NAME_PROPERTY ?? 'legal_name_original').trim().toLowerCase()) }}",
+              "type": "string"
+            },
+            {
+              "id": "62ff98ea-cc60-513c-a6d7-c63aa4f4ad7b",
+              "name": "config.allowOverwriteWithoutBackup",
+              "value": "={{ String($env.ALLOW_OVERWRITE_WITHOUT_BACKUP ?? 'false').trim().toLowerCase() === 'true' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "d984a79f-3b13-57ed-b4eb-d314fe23c523",
+              "name": "config.matchKeyProperty",
+              "value": "={{ (p => /^[a-z][a-z0-9_]{0,99}$/.test(p) ? p : '')(String($env.MATCH_KEY_PROPERTY ?? '').trim().toLowerCase()) }}",
+              "type": "string"
+            },
+            {
+              "id": "2fbdd59d-384a-58fc-99dd-1468eafb26d5",
+              "name": "config.writeUnchanged",
+              "value": "={{ String($env.WRITE_UNCHANGED ?? 'false').trim().toLowerCase() === 'true' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "53d5dc15-fb3e-54a1-a1c8-1c4416f52a63",
+              "name": "config.stripDescriptors",
+              "value": "={{ String($env.STRIP_DESCRIPTORS ?? 'true').trim().toLowerCase() !== 'false' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "c85921d9-05b7-569e-bd16-94746a97d03c",
+              "name": "config.matchKeyDropLeadingThe",
+              "value": "={{ String($env.MATCH_KEY_DROP_LEADING_THE ?? 'true').trim().toLowerCase() !== 'false' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "cb06bbcb-2e01-5297-8e5f-2c70569be909",
+              "name": "config.minCleanLength",
+              "value": "={{ Math.min(20, Math.max(1, Number.isFinite(parseFloat($env.MIN_CLEAN_LENGTH)) ? Math.round(parseFloat($env.MIN_CLEAN_LENGTH)) : 2)) }}",
+              "type": "number"
+            },
+            {
+              "id": "eb52ce99-2c20-5292-a6c9-7398f2397769",
+              "name": "config.protectedNames",
+              "value": "={{ String($env.PROTECTED_NAMES ?? '').split('|').map(x => x.trim()).filter(Boolean) }}",
+              "type": "array"
+            },
+            {
+              "id": "e38fbff9-f378-5e07-a8bd-263bd8b82a3a",
+              "name": "config.maxUpdatesPerRun",
+              "value": "={{ Math.min(10000, Math.max(1, Number.isFinite(parseFloat($env.MAX_UPDATES_PER_RUN)) ? Math.round(parseFloat($env.MAX_UPDATES_PER_RUN)) : 1000)) }}",
+              "type": "number"
+            },
+            {
+              "id": "01b9d883-ed41-5759-92c0-83b6a281e276",
+              "name": "config.maxChangeRatio",
+              "value": "={{ Math.min(1, Math.max(0.01, Number.isFinite(parseFloat($env.MAX_CHANGE_RATIO)) ? parseFloat($env.MAX_CHANGE_RATIO) : 0.8)) }}",
+              "type": "number"
+            },
+            {
+              "id": "4b9e3e6e-cb23-5210-82e2-c2f8e3d29b42",
+              "name": "config.updateBatchSize",
+              "value": "={{ Math.min(100, Math.max(1, Number.isFinite(parseFloat($env.UPDATE_BATCH_SIZE)) ? Math.round(parseFloat($env.UPDATE_BATCH_SIZE)) : 100)) }}",
+              "type": "number"
+            },
+            {
+              "id": "120d07c3-3916-5230-846c-24a6fd030023",
+              "name": "config.notifySampleSize",
+              "value": "={{ Math.min(25, Math.max(0, Number.isFinite(parseFloat($env.NOTIFY_SAMPLE_SIZE)) ? Math.round(parseFloat($env.NOTIFY_SAMPLE_SIZE)) : 8)) }}",
+              "type": "number"
+            },
+            {
+              "id": "02a9df23-7aad-5b90-9961-d4a649b9176e",
+              "name": "config.notifyChannels",
+              "value": "={{ String($env.NOTIFY_CHANNELS ?? 'slack').toLowerCase().split(',').map(x => x.trim()).filter(x => ['slack', 'webhook'].includes(x)) }}",
+              "type": "array"
+            },
+            {
+              "id": "1049f74a-c7f9-5c85-a8b5-8b21a662073b",
+              "name": "config.slackEnabled",
+              "value": "={{ !(String($env.SANDBOX_MODE ?? 'true').trim().toLowerCase() !== 'false') && String($env.NOTIFY_CHANNELS ?? 'slack').toLowerCase().split(',').map(x => x.trim()).filter(x => ['slack', 'webhook'].includes(x)).includes('slack') && Boolean(String($env.SLACK_WEBHOOK_URL ?? '').trim()) }}",
+              "type": "boolean"
+            },
+            {
+              "id": "b7338f53-d79c-5963-ad20-e088ca5f950c",
+              "name": "config.webhookEnabled",
+              "value": "={{ !(String($env.SANDBOX_MODE ?? 'true').trim().toLowerCase() !== 'false') && String($env.NOTIFY_CHANNELS ?? 'slack').toLowerCase().split(',').map(x => x.trim()).filter(x => ['slack', 'webhook'].includes(x)).includes('webhook') && Boolean(String($env.ALERT_WEBHOOK_URL ?? '').trim()) }}",
+              "type": "boolean"
+            },
+            {
+              "id": "31b1df84-7c3e-57be-a3d9-eb55c5f63e21",
+              "name": "config.notifyOnEveryRun",
+              "value": "={{ String($env.NOTIFY_ON_EVERY_RUN ?? 'false').trim().toLowerCase() === 'true' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "5df114a0-5645-5a6c-ab0a-71c30f4f39d3",
+              "name": "config.hubspotBaseUrl",
+              "value": "={{ String($env.HUBSPOT_API_BASE_URL ?? 'https://api.hubapi.com').trim().replace(/\\/+$/, '') || 'https://api.hubapi.com' }}",
+              "type": "string"
+            },
+            {
+              "id": "ced5ecaa-708f-5516-b440-78a12cdb61dd",
+              "name": "config.runId",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "d17217aa-b093-5bed-89ed-261f0b04e85e",
+              "name": "config.executionMode",
+              "value": "={{ $execution.mode }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a9b2d6a4-19f0-551d-89eb-e4cd568395e9",
+      "name": "Config & Safety Gate",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -340,
+        200
+      ],
+      "notes": "Typed, non-secret configuration under config.*. Property names are validated as HubSpot internal names.",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "72121b8c-f520-5668-991f-f66bbbc68a82",
+              "leftValue": "={{ $('Config & Safety Gate').first().json.config.sandboxMode }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "76c3bc15-33e7-5690-bcc8-105bc9d04fa9",
+      "name": "Sandbox Mode?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Mock HubSpot Companies (SANDBOX_MODE=true)\n// sample-payloads/hubspot-companies.json in the CRM search response shape.\n// Property names are mapped to the configured CLEAN_NAME_PROPERTY /\n// RAW_NAME_PROPERTY so the sandbox follows your settings. No HubSpot call.\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nconst FIXTURE = {\n  \"_comment\": \"Synthetic fixture in the HubSpot CRM search response shape. All company names and IDs are fictitious. Expected results: README §5.\",\n  \"total\": 24,\n  \"results\": [\n    {\n      \"id\": \"1004501\",\n      \"properties\": {\n        \"hs_object_id\": \"1004501\",\n        \"name\": \"Acme Cloud Solutions, LLC\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T01:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T01:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004502\",\n      \"properties\": {\n        \"hs_object_id\": \"1004502\",\n        \"name\": \"Northstar Logistics Inc.\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T02:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T02:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004503\",\n      \"properties\": {\n        \"hs_object_id\": \"1004503\",\n        \"name\": \"Bavaria Precision Engineering GmbH\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T03:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T03:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004504\",\n      \"properties\": {\n        \"hs_object_id\": \"1004504\",\n        \"name\": \"Apex Global Holdings Ltd.\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T04:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T04:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004505\",\n      \"properties\": {\n        \"hs_object_id\": \"1004505\",\n        \"name\": \"Incredible Foods\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T05:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T05:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004506\",\n      \"properties\": {\n        \"hs_object_id\": \"1004506\",\n        \"name\": \"Global Tech Holdings, LLC\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T06:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T06:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004507\",\n      \"properties\": {\n        \"hs_object_id\": \"1004507\",\n        \"name\": \"Coastline Co.\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T07:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T07:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004508\",\n      \"properties\": {\n        \"hs_object_id\": \"1004508\",\n        \"name\": \"Harbor & Co.\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T08:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T08:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004509\",\n      \"properties\": {\n        \"hs_object_id\": \"1004509\",\n        \"name\": \"Lumière Optique S.A.S.\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T09:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T09:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004510\",\n      \"properties\": {\n        \"hs_object_id\": \"1004510\",\n        \"name\": \"Kiwi Orchard Pty Ltd\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T01:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T01:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004511\",\n      \"properties\": {\n        \"hs_object_id\": \"1004511\",\n        \"name\": \"Rotterdam Freight B.V.\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T02:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T02:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004512\",\n      \"properties\": {\n        \"hs_object_id\": \"1004512\",\n        \"name\": \"Andes Mining S.A. de C.V.\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T03:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T03:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004513\",\n      \"properties\": {\n        \"hs_object_id\": \"1004513\",\n        \"name\": \"Bella Spa\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T04:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T04:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004514\",\n      \"properties\": {\n        \"hs_object_id\": \"1004514\",\n        \"name\": \"Milano Tessile S.p.A.\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T05:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T05:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004515\",\n      \"properties\": {\n        \"hs_object_id\": \"1004515\",\n        \"name\": \"Clearbrook Analytics\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T06:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T06:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004516\",\n      \"properties\": {\n        \"hs_object_id\": \"1004516\",\n        \"name\": \"The Group\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T07:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T07:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004517\",\n      \"properties\": {\n        \"hs_object_id\": \"1004517\",\n        \"name\": \"Summit Legal Partners LLP\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T08:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T08:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004518\",\n      \"properties\": {\n        \"hs_object_id\": \"1004518\",\n        \"name\": \"  pinecrest   dental, p.c.  \",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T09:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T09:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004519\",\n      \"properties\": {\n        \"hs_object_id\": \"1004519\",\n        \"name\": \"Corporate Travel Experts\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T01:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T01:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004520\",\n      \"properties\": {\n        \"hs_object_id\": \"1004520\",\n        \"name\": \"Orion Data Corp, Inc.\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T02:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T02:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004521\",\n      \"properties\": {\n        \"hs_object_id\": \"1004521\",\n        \"name\": \"Tokyo Robotics Co., Ltd.\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T03:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T03:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004522\",\n      \"properties\": {\n        \"hs_object_id\": \"1004522\",\n        \"name\": \"Wisła Software Sp. z o.o.\",\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T04:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T04:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004523\",\n      \"properties\": {\n        \"hs_object_id\": \"1004523\",\n        \"name\": \"Delta Freight LLC\",\n        \"clean_company_name\": \"Delta Freight\",\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T05:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T05:00:00.000Z\",\n      \"archived\": false\n    },\n    {\n      \"id\": \"1004524\",\n      \"properties\": {\n        \"hs_object_id\": \"1004524\",\n        \"name\": null,\n        \"clean_company_name\": null,\n        \"legal_name_original\": null,\n        \"hs_lastmodifieddate\": \"2026-11-16T06:00:00.000Z\"\n      },\n      \"createdAt\": \"2026-10-01T09:00:00.000Z\",\n      \"updatedAt\": \"2026-11-16T06:00:00.000Z\",\n      \"archived\": false\n    }\n  ]\n};\nconst companies = FIXTURE.results.slice(0, cfg.batchLimit).map((r) => {\n  const p = { ...r.properties };\n  if (cfg.cleanNameProperty && cfg.cleanNameProperty !== 'clean_company_name') { p[cfg.cleanNameProperty] = p.clean_company_name; delete p.clean_company_name; }\n  if (cfg.rawNameProperty && cfg.rawNameProperty !== 'legal_name_original') { p[cfg.rawNameProperty] = p.legal_name_original; delete p.legal_name_original; }\n  return { id: r.id, properties: p };\n});\nreturn [{ json: { source: 'fixture', scope: cfg.searchScope, total: FIXTURE.total, companies, maxId: companies.reduce((m, c) => Math.max(m, Number(c.id)), 0), searchCapReached: false } }];\n"
+      },
+      "id": "5bf58e4b-c60a-5095-acad-859fdf18248d",
+      "name": "Mock HubSpot Companies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        100,
+        60
+      ],
+      "notes": "sample-payloads/hubspot-companies.json.",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Build Search Request\n// HubSpot CRM search body for SEARCH_SCOPE:\n//   modified_since → hs_lastmodifieddate ≥ now − LOOKBACK_HOURS\n//   backfill       → hs_object_id > cursor (workflow static data, or\n//                    BACKFILL_START_AFTER_ID), walking the whole portal\n//   unprocessed    → CLEAN_NAME_PROPERTY has no value\n// Always: name has a value; sorted by hs_object_id ascending, 100 per page.\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nlet store = null;\ntry { store = $getWorkflowStaticData('global'); } catch (e) { store = null; }\nconst storedCursor = store && store.backfillCursor ? String(store.backfillCursor) : null;\nconst cursor = storedCursor || cfg.backfillStartAfterId || '0';\nconst filters = [{ propertyName: 'name', operator: 'HAS_PROPERTY' }];\nif (cfg.searchScope === 'modified_since') filters.push({ propertyName: 'hs_lastmodifieddate', operator: 'GTE', value: String(Date.now() - cfg.lookbackHours * 3600000) });\nif (cfg.searchScope === 'backfill') filters.push({ propertyName: 'hs_object_id', operator: 'GT', value: cursor });\nif (cfg.searchScope === 'unprocessed') {\n  if (!cfg.cleanNameProperty) throw new Error('SEARCH_SCOPE=unprocessed needs CLEAN_NAME_PROPERTY.');\n  filters.push({ propertyName: cfg.cleanNameProperty, operator: 'NOT_HAS_PROPERTY' });\n}\nconst properties = [...new Set(['name', 'hs_object_id', 'hs_lastmodifieddate', cfg.cleanNameProperty, cfg.rawNameProperty, cfg.matchKeyProperty].filter(Boolean))];\nreturn [{ json: {\n  searchBody: { filterGroups: [{ filters }], sorts: [{ propertyName: 'hs_object_id', direction: 'ASCENDING' }], properties, limit: 100 },\n  maxPages: Math.max(1, Math.ceil(cfg.batchLimit / 100)),\n  cursor: cfg.searchScope === 'backfill' ? cursor : null,\n} }];\n"
+      },
+      "id": "db8f3a3d-6a21-58d5-a0d1-3a9bf481ee4a",
+      "name": "Build Search Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        100,
+        320
+      ],
+      "notes": "Scope filters, properties, sort, page budget.",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config & Safety Gate').first().json.config.hubspotBaseUrl }}/crm/v3/objects/companies/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.HUBSPOT_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.searchBody) }}",
+        "options": {
+          "timeout": 30000,
+          "pagination": {
+            "pagination": {
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "body",
+                    "name": "after",
+                    "value": "={{ $response.body.paging.next.after }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.paging || !$response.body.paging.next || !$response.body.paging.next.after }}",
+              "limitPagesFetched": true,
+              "maxRequests": "={{ $('Build Search Request').first().json.maxPages }}",
+              "requestInterval": 250
+            }
+          }
+        }
+      },
+      "id": "23bd45fc-ce8a-568e-bd9e-782fc376a0cd",
+      "name": "HubSpot: Search Companies",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        320,
+        320
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "notes": "CRM search, 100 per page, cursor pagination (≤ 5 requests/second). Scope: crm.objects.companies.read.",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Collect Search Pages\n// Flattens every page returned by the paginated search, caps at BATCH_LIMIT\n// and notes when HubSpot's 10,000-result search ceiling is reached.\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nconst pages = $input.all().map((i) => i.json);\nif (pages.length === 1 && pages[0].error) throw new Error(`HubSpot search failed: ${JSON.stringify(pages[0].error).slice(0, 300)}`);\nconst seen = new Set();\nconst companies = [];\nfor (const pg of pages) for (const r of pg.results || []) {\n  if (seen.has(String(r.id)) || companies.length >= cfg.batchLimit) continue;\n  seen.add(String(r.id));\n  companies.push({ id: String(r.id), properties: r.properties || {} });\n}\nconst total = Number(pages[0]?.total) || companies.length;\nreturn [{ json: { source: 'hubspot', scope: cfg.searchScope, cursor: $('Build Search Request').first().json.cursor, total, companies,\n  maxId: companies.reduce((m, c) => Math.max(m, Number(c.id) || 0), 0),\n  moreAvailable: total > companies.length, searchCapReached: total > 10000 } }];\n"
+      },
+      "id": "b0d23c68-42da-515b-a286-3c9875eeccb6",
+      "name": "Collect Search Pages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        540,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Legal Suffix Normalization & Cleaning\n// Rules (README §9):\n//  • Whitespace is collapsed and the name trimmed; case is never changed.\n//  • Suffixes are matched only at the END of the name, as whole tokens,\n//    longest phrase first, repeatedly (stacked suffixes, max 5 passes).\n//    \"Inc.\" inside \"Incredible Foods\" can never match.\n//  • Tokens are compared without dots, commas or spaces, so LLC / L.L.C. /\n//    L. L. C. and \"Co., Ltd.\" all match.\n//  • Ambiguous short forms that are also ordinary words (Spa, SA, AG, PC, LP…)\n//    are stripped only when written as a legal form: with dots, in capitals\n//    (unless the whole name is capitals), or in their canonical mixed case.\n//  • Descriptors (Holdings, Group, Company) are stripped only with\n//    STRIP_DESCRIPTORS=true.\n//  • A strip is refused if nothing meaningful would remain (\"The Group\").\n//  • PROTECTED_NAMES are never modified.\n// Outputs per record: cleaned_name, extracted_suffixes, was_modified, match_key.\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nconst { companies } = $input.first().json;\n\n// Legal entity forms (compact = lowercase, no dots/commas/spaces).\nconst LEGAL = [\n  // US\n  'llc', 'inc', 'incorporated', 'corp', 'corporation', 'co', 'company?', 'llp', 'lllp', 'lp', 'pc', 'pllc', 'pa', 'ltd', 'limited', 'ltda',\n  '&co', 'andco', 'coinc', 'coltd', 'colimited',\n  // UK / IE / Commonwealth\n  'plc', 'cic', 'ptyltd', 'ptylimited', 'pty', 'pvtltd', 'privatelimited', 'pteltd', 'sdnbhd', 'bhd', 'nl',\n  // DACH / Nordics / Benelux\n  'gmbh', 'gmbh&cokg', 'gmbhcokg', 'ag', 'kg', 'ohg', 'ug', 'eg', 'ev', 'se', 'kgaa',\n  'bv', 'nv', 'bvba', 'vof', 'cv', 'ab', 'as', 'asa', 'aps', 'oy', 'oyj',\n  // FR / ES / IT / PT / LATAM\n  'sa', 'sas', 'sasu', 'sarl', 'eurl', 'sca', 'snc', 'sl', 'slu', 'srl', 'srls', 'spa', 'sapa', 'scarl', 'lda',\n  'sadecv', 'sderldecv', 'srldecv', 'sapi', 'sapidecv', 'eireli', 'me', 'epp', 'saa', 'sac', 'spa',\n  // CEE\n  'spzoo', 'sp', 'sro', 'as', 'doo', 'kft', 'zrt', 'nyrt', 'ad', 'ood', 'eood', 'srl',\n  // APAC\n  'kk', 'gk', 'yk', 'cokk', 'ptyltd', 'tbk', 'pt', 'jsc', 'ojsc', 'llc',\n].filter((x) => !x.endsWith('?'));\nconst DESCRIPTORS = ['holdings', 'holding', 'group', 'company'];\n// Short forms that are also ordinary words or brand tokens.\nconst AMBIGUOUS = new Set(['spa', 'sa', 'as', 'ab', 'ag', 'kg', 'se', 'sl', 'oy', 'bv', 'nv', 'pc', 'lp', 'pa', 'nl', 'cv', 'ad', 'me', 'eg', 'ev', 'ug', 'pt', 'sp', 'kk', 'gk', 'yk', 'sas', 'sac', 'epp', 'doo', 'sapi']);\nconst CANONICAL = new Set(['SpA', 'GmbH', 'AG', 'KG', 'SE', 'SA', 'SL', 'BV', 'NV', 'AB', 'AS', 'Oy', 'PC', 'LP', 'PA', 'eG', 'e.V.', 'UG', 'PT', 'KK', 'GK', 'SAS', 'SAC', 'SL', 'S.A.', 'AD', 'NL', 'CV']);\nconst LEGAL_SET = new Set(LEGAL);\nconst DESC_SET = new Set(DESCRIPTORS);\nconst STOP = new Set(['the', 'and', '&', 'of', 'a', 'an', 'de', 'la', 'le', 'el', 'der', 'die', 'das', 'und', 'et', 'y']);\nconst MAX_PHRASE = 6;\n\nconst compact = (s) => s.toLowerCase().replace(/[.,\\s]/g, '');\nconst lettersOf = (s) => s.replace(/[^\\p{L}]/gu, '');\nconst protectedSet = new Set(cfg.protectedNames.map((n) => n.toLowerCase().replace(/\\s+/g, ' ').trim()));\n\nfunction hasCore(tokens) {\n  return tokens.some((t) => { const w = t.toLowerCase().replace(/[^\\p{L}\\p{N}&]/gu, ''); return w.length >= 2 && !STOP.has(w); });\n}\n\nfunction clean(raw) {\n  const original = raw == null ? '' : String(raw);\n  const collapsed = original.replace(/[ \\s]+/g, ' ').trim();\n  if (!collapsed) return { cleaned: '', suffixes: [], modified: false, status: 'no_name' };\n  if (protectedSet.has(collapsed.toLowerCase())) return { cleaned: collapsed, suffixes: [], modified: false, status: 'protected_name' };\n  const nameIsAllCaps = lettersOf(collapsed).length > 0 && lettersOf(collapsed) === lettersOf(collapsed).toUpperCase();\n\n  let tokens = collapsed.split(' ');\n  const extracted = [];\n  const refused = [];\n  for (let pass = 0; pass < 5 && tokens.length > 1; pass += 1) {\n    let hit = null;\n    for (let L = Math.min(MAX_PHRASE, tokens.length - 1); L >= 1 && !hit; L -= 1) {\n      const tail = tokens.slice(tokens.length - L);\n      // A leading comma on the tail (\"Solutions, LLC\") belongs to the previous token.\n      const tailText = tail.join(' ').replace(/^[,;]+/, '');\n      const key = compact(tailText);\n      const isLegal = LEGAL_SET.has(key);\n      const isDesc = cfg.stripDescriptors && DESC_SET.has(key);\n      if (!isLegal && !isDesc) continue;\n      if (AMBIGUOUS.has(key)) {\n        const bare = tailText.replace(/[,;]+$/, '');\n        const dotted = /\\./.test(bare);\n        const caps = lettersOf(bare) === lettersOf(bare).toUpperCase() && !nameIsAllCaps;\n        if (!dotted && !caps && !CANONICAL.has(bare)) { refused.push({ suffix: bare, reason: 'ambiguous_form' }); continue; }\n      }\n      const rest = tokens.slice(0, tokens.length - L);\n      if (!hasCore(rest)) { refused.push({ suffix: tailText, reason: 'would_leave_no_core_name' }); continue; }\n      hit = { L, text: tailText.replace(/[,;]+$/, ''), kind: isLegal ? 'legal' : 'descriptor' };\n    }\n    if (!hit) break;\n    extracted.unshift(hit.text);\n    tokens = tokens.slice(0, tokens.length - hit.L);\n    // Trailing punctuation / connectors left behind (\"Solutions,\" / \"Harbor &\").\n    while (tokens.length > 1 && /^(&|and|und|et|y|-|–|—)$/i.test(tokens[tokens.length - 1])) tokens.pop();\n    tokens[tokens.length - 1] = tokens[tokens.length - 1].replace(/[,;:\\-–—/]+$/, '');\n    if (!tokens[tokens.length - 1]) tokens.pop();\n  }\n  let cleaned = tokens.join(' ').replace(/\\s+([,;:])/g, '$1').replace(/[,;:\\-–—/\\s]+$/, '').trim();\n  // Unbalanced trailing \"(\" left by \"Acme (UK Ltd)\" style input.\n  if ((cleaned.match(/\\(/g) || []).length > (cleaned.match(/\\)/g) || []).length) cleaned = cleaned.replace(/\\s*\\([^)]*$/, '').trim();\n  if (cleaned.length < cfg.minCleanLength) return { cleaned: collapsed, suffixes: [], modified: collapsed !== original, status: 'too_short_after_clean', refused };\n  return { cleaned, suffixes: extracted, modified: cleaned !== original, status: extracted.length ? 'suffix_removed' : cleaned !== original ? 'whitespace_normalized' : 'already_clean', refused };\n}\n\nfunction matchKey(name) {\n  let s = String(name || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase();\n  s = s.replace(/ł/g, 'l').replace(/ø/g, 'o').replace(/ß/g, 'ss').replace(/æ/g, 'ae').replace(/œ/g, 'oe').replace(/đ/g, 'd');\n  s = s.replace(/&/g, ' and ').replace(/\\+/g, ' and ');\n  if (cfg.matchKeyDropLeadingThe) s = s.replace(/^\\s*the\\s+/, '');\n  return s.replace(/[^\\p{L}\\p{N}]/gu, '');\n}\n\nconst records = companies.map((c) => {\n  const p = c.properties || {};\n  const raw = p.name;\n  const r = clean(raw);\n  const key = r.cleaned ? matchKey(r.cleaned) : '';\n  return {\n    id: String(c.id),\n    original_name: raw == null ? null : String(raw),\n    cleaned_name: r.cleaned,\n    extracted_suffixes: r.suffixes,\n    was_modified: r.modified,\n    match_key: key,\n    status: r.status,\n    refused: r.refused || [],\n    current: { clean: p[cfg.cleanNameProperty] ?? null, raw: cfg.rawNameProperty ? (p[cfg.rawNameProperty] ?? null) : null, matchKey: cfg.matchKeyProperty ? (p[cfg.matchKeyProperty] ?? null) : null },\n  };\n});\nconst counts = { scanned: records.length, modified: records.filter((r) => r.was_modified).length, suffix_removed: records.filter((r) => r.status === 'suffix_removed').length, whitespace_normalized: records.filter((r) => r.status === 'whitespace_normalized').length, already_clean: records.filter((r) => r.status === 'already_clean').length, protected: records.filter((r) => r.status === 'protected_name').length, no_name: records.filter((r) => r.status === 'no_name').length, too_short: records.filter((r) => r.status === 'too_short_after_clean').length };\nreturn [{ json: { counts, records } }];\n"
+      },
+      "id": "87667f4e-f988-5855-a73d-25296e25ad9d",
+      "name": "Legal Suffix Normalization & Cleaning",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        200
+      ],
+      "notes": "cleaned_name · extracted_suffixes · was_modified · match_key.",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Build Batch Updates\n// Decides per record what (if anything) to write, then chunks the writes into\n// HubSpot batch/update requests of UPDATE_BATCH_SIZE (≤ 100).\n//   preserve (default): CLEAN_NAME_PROPERTY ← cleaned_name; `name` untouched\n//   overwrite (OVERWRITE_NAME=true): name ← cleaned_name, original copied to\n//     RAW_NAME_PROPERTY first (only if that property is still empty)\n//   MATCH_KEY_PROPERTY ← match_key, when configured\n// Only modified records are written unless WRITE_UNCHANGED=true. Values that\n// already match HubSpot are skipped. Guards: overwrite without a backup\n// property, the change-ratio circuit breaker and MAX_UPDATES_PER_RUN.\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nconst { records, counts } = $input.first().json;\nconst SKIP_STATUS = new Set(['no_name', 'protected_name', 'too_short_after_clean']);\n\nconst updates = [];\nconst skipped = [];\nfor (const r of records) {\n  if (SKIP_STATUS.has(r.status)) { skipped.push({ id: r.id, reason: r.status }); continue; }\n  if (!r.was_modified && !cfg.writeUnchanged) { skipped.push({ id: r.id, reason: 'unchanged' }); continue; }\n  const props = {};\n  if (cfg.overwriteName) {\n    if (r.was_modified) {\n      props.name = r.cleaned_name;\n      if (cfg.rawNameProperty && !r.current.raw) props[cfg.rawNameProperty] = r.original_name;\n    }\n    if (cfg.cleanNameProperty && r.current.clean !== r.cleaned_name) props[cfg.cleanNameProperty] = r.cleaned_name;\n  } else if (r.current.clean !== r.cleaned_name) props[cfg.cleanNameProperty] = r.cleaned_name;\n  if (cfg.matchKeyProperty && r.match_key && r.current.matchKey !== r.match_key) props[cfg.matchKeyProperty] = r.match_key;\n  if (!Object.keys(props).length) { skipped.push({ id: r.id, reason: 'already_current' }); continue; }\n  updates.push({ id: r.id, properties: props, before: r.original_name, after: r.cleaned_name, suffixes: r.extracted_suffixes });\n}\n\nlet blocked = null;\nif (cfg.overwriteName && !cfg.rawNameProperty && !cfg.allowOverwriteWithoutBackup) blocked = 'overwrite_without_backup: set RAW_NAME_PROPERTY or ALLOW_OVERWRITE_WITHOUT_BACKUP=true';\nconst ratio = counts.scanned ? updates.filter((u) => 'name' in u.properties).length / counts.scanned : 0;\nif (!blocked && cfg.overwriteName && counts.scanned >= 20 && ratio > cfg.maxChangeRatio) blocked = `circuit_breaker: ${(ratio * 100).toFixed(0)}% of scanned names would be overwritten (> MAX_CHANGE_RATIO ${cfg.maxChangeRatio})`;\n\nconst deferred = updates.length > cfg.maxUpdatesPerRun ? updates.slice(cfg.maxUpdatesPerRun).map((u) => u.id) : [];\nconst toWrite = blocked ? [] : updates.slice(0, cfg.maxUpdatesPerRun);\nconst batches = [];\nfor (let i = 0; i < toWrite.length; i += cfg.updateBatchSize) {\n  const slice = toWrite.slice(i, i + cfg.updateBatchSize);\n  batches.push({ batchNo: batches.length + 1, ids: slice.map((u) => u.id), body: { inputs: slice.map((u) => ({ id: u.id, properties: u.properties })) } });\n}\nreturn [{ json: {\n  counts: { ...counts, updates: updates.length, skipped: skipped.length, deferred: deferred.length },\n  updates, skipped, deferred, blocked, batches,\n  writeAllowed: cfg.writeToHubspot && !blocked && batches.length > 0,\n  samples: updates.filter((u) => u.before !== u.after).slice(0, cfg.notifySampleSize).map((u) => ({ id: u.id, before: u.before, after: u.after, suffixes: u.suffixes })),\n} }];\n"
+      },
+      "id": "41cda82f-130e-5d3a-bee0-ddf9309d7539",
+      "name": "Build Batch Updates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        980,
+        200
+      ],
+      "notes": "Modified-only writes, preserve/overwrite, guards, batches of ≤ 100.",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "07f4b634-e493-579d-8a2a-ce0706aef208",
+              "leftValue": "={{ $json.writeAllowed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7425c4f6-a88f-56b1-b269-657252296b91",
+      "name": "Write Gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per batch/update request.\nreturn $('Build Batch Updates').first().json.batches.map((b) => ({ json: b }));\n"
+      },
+      "id": "c8cff005-4407-5b85-8183-a45393f2cf95",
+      "name": "Emit Update Batches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config & Safety Gate').first().json.config.hubspotBaseUrl }}/crm/v3/objects/companies/batch/update",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.HUBSPOT_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "edcc4ed2-a2a3-5b30-93d4-35afc5ef329a",
+      "name": "HubSpot: Batch Update Companies",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1640,
+        100
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 10000,
+      "notes": "≤ 100 inputs per request, 1 request/second. Scope: crm.objects.companies.write.",
+      "notesInFlow": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Collect Update Results\n// Joins batch/update responses by index. HubSpot rejects a whole batch when\n// one input is invalid (e.g. a missing custom property), so failures are\n// reported per batch with the HubSpot message.\n// ─────────────────────────────────────────────────────────────────────────────\nconst batches = $('Emit Update Batches').all();\nconst resp = $input.all();\nif (resp.length !== batches.length) throw new Error(`Update result mismatch: ${batches.length} batches vs ${resp.length} responses. Unpin \"HubSpot: Batch Update Companies\" or align its items.`);\nconst results = batches.map((b, i) => {\n  const j = resp[i].json || {};\n  const failed = Boolean(j.error) || j.status === 'error';\n  return { batchNo: b.json.batchNo, records: b.json.ids.length, ok: !failed, updated: Array.isArray(j.results) ? j.results.length : 0, error: failed ? String(j.error?.message || j.message || j.error || 'batch_failed').slice(0, 300) : null };\n});\nreturn [{ json: { results, updated: results.reduce((n, r) => n + r.updated, 0), failedBatches: results.filter((r) => !r.ok).length } }];\n"
+      },
+      "id": "ef9f6980-ad03-5613-8ee6-6c939412fb64",
+      "name": "Collect Update Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1860,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Build Notification\n// Slack summary + webhook JSON: scanned, cleaned, skipped, written, failures\n// and sample before → after transformations (company names only).\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nconst cmp = $('Build Batch Updates').first().json;\nconst src = $('Mock HubSpot Companies').isExecuted ? $('Mock HubSpot Companies').first().json : $('Collect Search Pages').first().json;\nlet res = null;\ntry { res = $('Collect Update Results').isExecuted ? $('Collect Update Results').first().json : null; } catch (e) { res = null; }\nconst c = cmp.counts;\nconst mode = cfg.sandboxMode ? 'SANDBOX (synthetic companies, nothing written)' : cfg.writeToHubspot ? 'LIVE (written to HubSpot)' : cfg.dryRun ? 'DRY RUN (nothing written)' : 'WRITE DISABLED (nothing written)';\nconst target = cfg.overwriteName ? `name (original → ${cfg.rawNameProperty || 'not backed up'})` : cfg.cleanNameProperty;\nconst esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst blocks = [\n  { type: 'header', text: { type: 'plain_text', text: 'HubSpot company name standardizer', emoji: true } },\n  { type: 'context', elements: [{ type: 'mrkdwn', text: `*${mode}* · scope \\`${src.scope}\\` · target \\`${target}\\`` }] },\n  { type: 'section', text: { type: 'mrkdwn', text: `🔎 *${c.scanned}* scanned · ✂️ *${c.suffix_removed}* suffixes removed · 🧹 ${c.whitespace_normalized} whitespace fixes · ✅ ${c.already_clean} already clean · ⏭️ *${c.skipped}* skipped · 📝 *${res ? res.updated : 0}* written${c.deferred ? ` · ${c.deferred} deferred` : ''}` } },\n];\nif (cmp.samples.length) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Samples*\\n${cmp.samples.map((s) => `• \\`${s.id}\\` ${esc(s.before)} → *${esc(s.after)}*${s.suffixes.length ? ` _(${esc(s.suffixes.join(', '))})_` : ''}`).join('\\n')}`.slice(0, 2900) } });\nif (cmp.blocked) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `⛔ *Writes blocked:* ${esc(cmp.blocked)}` } });\nif (res && res.failedBatches) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `❌ *${res.failedBatches} batch(es) failed:* ${res.results.filter((r) => !r.ok).map((r) => `#${r.batchNo} ${esc(r.error)}`).join('; ')}`.slice(0, 2900) } });\nif (src.moreAvailable) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `More matching companies than BATCH_LIMIT (${cfg.batchLimit}); ${src.searchCapReached ? 'HubSpot search stops at 10,000 results: use SEARCH_SCOPE=backfill.' : 'the next run continues.'}` }] });\nblocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `n8n run ${cfg.runId}` }] });\nconst worthNotifying = c.updates > 0 || Boolean(cmp.blocked) || Boolean(res && res.failedBatches) || cfg.notifyOnEveryRun;\nreturn [{ json: { worthNotifying,\n  slackBody: { text: `Company name standardizer: ${c.scanned} scanned, ${c.suffix_removed} cleaned, ${res ? res.updated : 0} written (${mode}).`, blocks },\n  webhookBody: { event: 'hubspot.company_names.standardized', runId: cfg.runId, generatedAt: new Date().toISOString(), mode: cfg.sandboxMode ? 'sandbox' : cfg.writeToHubspot ? 'live' : 'dry_run',\n    scope: src.scope, target, counts: c, written: res ? res.updated : 0, failedBatches: res ? res.failedBatches : 0, blocked: cmp.blocked, samples: cmp.samples } } }];\n"
+      },
+      "id": "0668345b-eed3-5448-8572-21b4e4da8ce2",
+      "name": "Build Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        200
+      ],
+      "notes": "Counts + sample before → after.",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "a509a0d4-6028-5c14-898a-db9be8157f01",
+              "leftValue": "={{ $json.worthNotifying }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e57ef8d4-d531-50c4-9555-86decea0a2f0",
+      "name": "Notify?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2300,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "929d4404-4f31-5c31-86a9-66d980651d05",
+              "leftValue": "={{ $('Config & Safety Gate').first().json.config.slackEnabled }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f53d1657-0b00-5698-8a0f-749be629cd54",
+      "name": "Slack Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2520,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Build Notification').first().json.slackBody) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "9bab76e7-e5df-5c98-8b92-29b5ea442c58",
+      "name": "Slack: Post Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2740,
+        60
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "notes": "Slack incoming webhook.",
+      "notesInFlow": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "84f185f6-e31b-5581-ac59-78962e7d6b28",
+              "leftValue": "={{ $('Config & Safety Gate').first().json.config.webhookEnabled }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d80aabfb-3ef1-52a1-8577-55d403631167",
+      "name": "Webhook Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2960,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ALERT_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.ALERT_WEBHOOK_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Build Notification').first().json.webhookBody) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "15c3f9bb-e629-51e1-b1c8-236e59fa96c5",
+      "name": "Webhook: Post Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3180,
+        60
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "notes": "Generic JSON webhook.",
+      "notesInFlow": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Execution Summary & Audit\n// Final record on every path, and the only place the backfill cursor moves:\n// it advances to the highest scanned company ID only after a successful\n// production write run with nothing blocked, failed or deferred.\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nconst one = (n) => { try { return $(n).isExecuted ? $(n).first().json : null; } catch (e) { return null; } };\nconst all = (n) => { try { return $(n).isExecuted ? $(n).all().map((i) => i.json) : []; } catch (e) { return []; } };\nconst src = one('Mock HubSpot Companies') || one('Collect Search Pages') || {};\nconst cl = one('Legal Suffix Normalization & Cleaning');\nconst cmp = one('Build Batch Updates');\nconst res = one('Collect Update Results');\nconst sl = all('Slack: Post Summary');\nconst wh = all('Webhook: Post Summary');\n\nlet cursor = { scope: src.scope || cfg.searchScope, before: src.cursor || null, after: src.cursor || null, advanced: false };\nif (cfg.searchScope === 'backfill' && !cfg.sandboxMode && cfg.writeToHubspot && cfg.executionMode === 'production' && cmp && !cmp.blocked && !cmp.deferred.length && !(res && res.failedBatches) && src.maxId) {\n  try { const store = $getWorkflowStaticData('global'); store.backfillCursor = String(src.maxId); cursor = { ...cursor, after: String(src.maxId), advanced: true }; } catch (e) { /* static data unavailable */ }\n}\nlet outcome = 'no_companies';\nif (cl && cl.counts.scanned) {\n  if (!cmp.updates.length) outcome = 'nothing_to_update';\n  else if (cmp.blocked) outcome = 'writes_blocked';\n  else if (cfg.sandboxMode) outcome = 'updates_found_sandbox';\n  else if (!cfg.writeToHubspot) outcome = cfg.dryRun ? 'updates_found_dry_run' : 'updates_found_write_disabled';\n  else if (res && res.failedBatches) outcome = res.updated ? 'updated_partially' : 'update_failed';\n  else outcome = cmp.deferred.length ? 'updated_more_pending' : 'updated';\n}\nconst status = (list) => (!list.length ? 'not_sent' : list.some((x) => x.error) ? 'failed' : 'sent');\nreturn [{ json: {\n  workflow: 'n8n-hubspot-company-legal-suffix-standardizer',\n  runId: cfg.runId, executionMode: cfg.executionMode, finishedAt: new Date().toISOString(), outcome,\n  safety: { sandboxMode: cfg.sandboxMode, dryRun: cfg.dryRun, writeToHubspot: cfg.writeToHubspot, overwriteName: cfg.overwriteName },\n  target: { cleanNameProperty: cfg.cleanNameProperty || null, rawNameProperty: cfg.rawNameProperty || null, matchKeyProperty: cfg.matchKeyProperty || null },\n  source: { source: src.source || null, scope: src.scope || null, total: src.total ?? null, moreAvailable: Boolean(src.moreAvailable), searchCapReached: Boolean(src.searchCapReached) },\n  backfillCursor: cursor,\n  counts: cmp ? cmp.counts : (cl ? cl.counts : null),\n  blocked: cmp ? cmp.blocked : null,\n  changes: cmp ? cmp.updates.map((u) => ({ id: u.id, before: u.before, after: u.after, suffixes: u.suffixes, properties: Object.keys(u.properties) })) : [],\n  skipped: cmp ? cmp.skipped : [],\n  refusedStrips: cl ? cl.records.filter((r) => r.refused.length).map((r) => ({ id: r.id, name: r.original_name, refused: r.refused })) : [],\n  batches: res ? res.results : [],\n  notifications: { slack: status(sl), webhook: status(wh) },\n} }];\n"
+      },
+      "id": "10b9c090-21e0-55e1-b6c8-b0ef2afab9d6",
+      "name": "Execution Summary & Audit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3400,
+        320
+      ],
+      "notes": "Final record; advances the backfill cursor.",
+      "notesInFlow": false
+    }
+  ],
+  "connections": {
+    "Nightly Hygiene Schedule": {
+      "main": [
+        [
+          {
+            "node": "Config & Safety Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Test Trigger": {
+      "main": [
+        [
+          {
+            "node": "Config & Safety Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config & Safety Gate": {
+      "main": [
+        [
+          {
+            "node": "Sandbox Mode?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sandbox Mode?": {
+      "main": [
+        [
+          {
+            "node": "Mock HubSpot Companies",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Search Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock HubSpot Companies": {
+      "main": [
+        [
+          {
+            "node": "Legal Suffix Normalization & Cleaning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Search Request": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: Search Companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: Search Companies": {
+      "main": [
+        [
+          {
+            "node": "Collect Search Pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Search Pages": {
+      "main": [
+        [
+          {
+            "node": "Legal Suffix Normalization & Cleaning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Legal Suffix Normalization & Cleaning": {
+      "main": [
+        [
+          {
+            "node": "Build Batch Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Batch Updates": {
+      "main": [
+        [
+          {
+            "node": "Write Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Gate": {
+      "main": [
+        [
+          {
+            "node": "Emit Update Batches",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Emit Update Batches": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: Batch Update Companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: Batch Update Companies": {
+      "main": [
+        [
+          {
+            "node": "Collect Update Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Update Results": {
+      "main": [
+        [
+          {
+            "node": "Build Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Notification": {
+      "main": [
+        [
+          {
+            "node": "Notify?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify?": {
+      "main": [
+        [
+          {
+            "node": "Slack Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execution Summary & Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Enabled?": {
+      "main": [
+        [
+          {
+            "node": "Slack: Post Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Webhook Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: Post Summary": {
+      "main": [
+        [
+          {
+            "node": "Webhook Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Enabled?": {
+      "main": [
+        [
+          {
+            "node": "Webhook: Post Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execution Summary & Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: Post Summary": {
+      "main": [
+        [
+          {
+            "node": "Execution Summary & Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {
+    "HubSpot: Search Companies": [
+      {
+        "json": {
+          "total": 24,
+          "results": [
+            {
+              "id": "1004501",
+              "properties": {
+                "hs_object_id": "1004501",
+                "name": "Acme Cloud Solutions, LLC",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T01:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T01:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004502",
+              "properties": {
+                "hs_object_id": "1004502",
+                "name": "Northstar Logistics Inc.",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T02:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T02:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004503",
+              "properties": {
+                "hs_object_id": "1004503",
+                "name": "Bavaria Precision Engineering GmbH",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T03:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T03:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004504",
+              "properties": {
+                "hs_object_id": "1004504",
+                "name": "Apex Global Holdings Ltd.",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T04:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T04:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004505",
+              "properties": {
+                "hs_object_id": "1004505",
+                "name": "Incredible Foods",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T05:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T05:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004506",
+              "properties": {
+                "hs_object_id": "1004506",
+                "name": "Global Tech Holdings, LLC",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T06:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T06:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004507",
+              "properties": {
+                "hs_object_id": "1004507",
+                "name": "Coastline Co.",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T07:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T07:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004508",
+              "properties": {
+                "hs_object_id": "1004508",
+                "name": "Harbor & Co.",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T08:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T08:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004509",
+              "properties": {
+                "hs_object_id": "1004509",
+                "name": "Lumière Optique S.A.S.",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T09:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T09:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004510",
+              "properties": {
+                "hs_object_id": "1004510",
+                "name": "Kiwi Orchard Pty Ltd",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T01:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T01:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004511",
+              "properties": {
+                "hs_object_id": "1004511",
+                "name": "Rotterdam Freight B.V.",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T02:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T02:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004512",
+              "properties": {
+                "hs_object_id": "1004512",
+                "name": "Andes Mining S.A. de C.V.",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T03:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T03:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004513",
+              "properties": {
+                "hs_object_id": "1004513",
+                "name": "Bella Spa",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T04:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T04:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004514",
+              "properties": {
+                "hs_object_id": "1004514",
+                "name": "Milano Tessile S.p.A.",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T05:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T05:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004515",
+              "properties": {
+                "hs_object_id": "1004515",
+                "name": "Clearbrook Analytics",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T06:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T06:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004516",
+              "properties": {
+                "hs_object_id": "1004516",
+                "name": "The Group",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T07:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T07:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004517",
+              "properties": {
+                "hs_object_id": "1004517",
+                "name": "Summit Legal Partners LLP",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T08:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T08:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004518",
+              "properties": {
+                "hs_object_id": "1004518",
+                "name": "  pinecrest   dental, p.c.  ",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T09:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T09:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004519",
+              "properties": {
+                "hs_object_id": "1004519",
+                "name": "Corporate Travel Experts",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T01:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T01:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004520",
+              "properties": {
+                "hs_object_id": "1004520",
+                "name": "Orion Data Corp, Inc.",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T02:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T02:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004521",
+              "properties": {
+                "hs_object_id": "1004521",
+                "name": "Tokyo Robotics Co., Ltd.",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T03:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T03:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004522",
+              "properties": {
+                "hs_object_id": "1004522",
+                "name": "Wisła Software Sp. z o.o.",
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T04:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T04:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004523",
+              "properties": {
+                "hs_object_id": "1004523",
+                "name": "Delta Freight LLC",
+                "clean_company_name": "Delta Freight",
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T05:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T05:00:00.000Z",
+              "archived": false
+            },
+            {
+              "id": "1004524",
+              "properties": {
+                "hs_object_id": "1004524",
+                "name": null,
+                "clean_company_name": null,
+                "legal_name_original": null,
+                "hs_lastmodifieddate": "2026-11-16T06:00:00.000Z"
+              },
+              "createdAt": "2026-10-01T09:00:00.000Z",
+              "updatedAt": "2026-11-16T06:00:00.000Z",
+              "archived": false
+            }
+          ]
+        }
+      }
+    ],
+    "HubSpot: Batch Update Companies": [
+      {
+        "json": {
+          "status": "COMPLETE",
+          "results": [
+            {
+              "id": "1004501",
+              "properties": {}
+            },
+            {
+              "id": "1004502",
+              "properties": {}
+            },
+            {
+              "id": "1004503",
+              "properties": {}
+            },
+            {
+              "id": "1004504",
+              "properties": {}
+            },
+            {
+              "id": "1004505",
+              "properties": {}
+            },
+            {
+              "id": "1004506",
+              "properties": {}
+            },
+            {
+              "id": "1004507",
+              "properties": {}
+            },
+            {
+              "id": "1004508",
+              "properties": {}
+            },
+            {
+              "id": "1004509",
+              "properties": {}
+            },
+            {
+              "id": "1004510",
+              "properties": {}
+            },
+            {
+              "id": "1004511",
+              "properties": {}
+            },
+            {
+              "id": "1004512",
+              "properties": {}
+            },
+            {
+              "id": "1004513",
+              "properties": {}
+            },
+            {
+              "id": "1004514",
+              "properties": {}
+            },
+            {
+              "id": "1004515",
+              "properties": {}
+            },
+            {
+              "id": "1004516",
+              "properties": {}
+            },
+            {
+              "id": "1004517",
+              "properties": {}
+            }
+          ],
+          "startedAt": "2026-11-16T02:40:01.000Z",
+          "completedAt": "2026-11-16T02:40:02.000Z"
+        }
+      }
+    ],
+    "Slack: Post Summary": [
+      {
+        "json": {
+          "data": "ok"
+        }
+      }
+    ],
+    "Webhook: Post Summary": [
+      {
+        "json": {
+          "received": true
+        }
+      }
+    ]
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": false,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": 1800
+  },
+  "versionId": "17b85ac0-7473-561e-b6a7-e342febf3a10",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}
